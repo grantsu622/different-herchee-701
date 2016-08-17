@@ -193,6 +193,14 @@
 
 //__EEPROM_DATA(0xAB, 0x20, 0x16, 0x06, 0x15, 0x01, 0xFF, 0xFF);
     
+/*
+ * Timer 2 delay count:
+ * 5 sec. -> 39
+ * 3 sec. -> 23
+ * 2 sec. -> 15
+ * 1 sec. -> 8
+ * 0.5 sec. -> 4
+ */
     
     
 #define	Comeback_2WD_EN     			0
@@ -205,14 +213,14 @@
 #define LED_EN										1
 #define _4WD_Test_EN	 						0
 #define No_Feedback_EN       			1
-#define FRONT_TEST 1 
+#define FRONT_TEST 1 //前差測試
 
 #define	OUTPUT										0
 #define	INPUT											1
 #define HIGH											1
 #define LOW												0
 //#define _5S_Val										12											//1.5秒
-#define _5S_Val										39		//5秒
+#define _5S_Val			23	//3秒
 //#define _5S_Val										8
 //#define _3S_Val										24												//3秒
 //#define PAC1710_Error_val					10
@@ -221,9 +229,10 @@
 
 ////////////////////////////////// 錯誤模式下拉纜繩參數//////////////////////////////////////
 //#define Pull_Value								3
-#define Pull_Value	20   //20160629
+//#define Pull_Value	20   //20160629
+#define Pull_Value	5   //20160817
 //#define Pull_Count_Val						39										//5秒
-#define Pull_Count_Val						16										//2秒 20160629
+#define Pull_Count_Val		15	//2秒 20160817
 unsigned char Pull_Count = 0;//					= Pull_Value;
 unsigned char Pull = 0;
 unsigned char Pull_Timer_Star = 0;											//錯誤模式下啟動拉纜繩計時旗標
@@ -260,6 +269,10 @@ unsigned char Pull_5S_CNT = Pull_Count_Val;
 #define L1_Out										LATE2										
 #define L2_Out										LATE1
 #define L3_Out										LATE0
+#define L1_Toggle()   do{ LATE2 = ~LATE2;} while(0)
+#define L2_Toggle()   do{ LATE1 = ~LATE1;} while(0)
+#define L3_Toggle()   do{ LATE0 = ~LATE0;} while(0)
+unsigned char IsFistFlash = 0; // 1: is fist, 0: not fist
 
 //#define _4WDLOCK_Gear							0b100
 //#define _4WD_Gear									0b110
@@ -349,6 +362,7 @@ unsigned char Gear_Status_NEW;
 unsigned char	Gear_Status_OLD 		= 0;
 unsigned int  Init_Flag 					= 0;
 unsigned int	Init_Final 					= 0;
+unsigned char	Gear_ECU_Status_OLD 		= 0;
 
 ////////////////////////////////////RPM///////////////////////////////////////
 
@@ -385,11 +399,14 @@ unsigned int LED1_Count = 0;
 unsigned int LED2_Count = 0;
 unsigned int LED3_Count = 0;
 unsigned int LED13_Count = 0;
+unsigned int ECU_Count = 0;
 
 unsigned char	Special = 0,i,j,k;
 unsigned int  temp;
 unsigned char Moving_Status;
 
+
+unsigned char IsFistBoot = 0;
 
 ///////////////////////////////
 unsigned char Speed = 30,Speed_U = 0,Speed_H = 0,Speed_L = 0;
@@ -427,6 +444,14 @@ void Check_Motor_Status(void);
 //void Check_First_Status(void);
 void Output_ECU(void);
 
+void ECU_2W4W_FLASH(unsigned int Time);
+void ECU_4WLOCK_FLASH(unsigned int Time);
+void ECU_LOCK2W_FLASH(unsigned int Time);
+void ECU_LOCK_FLASH(unsigned int Time);
+void Gear_Status_NEW_4WDLOCK_Flash(void);
+void Gear_Status_NEW_4WD_Flash(void);
+void Gear_Status_NEW_2WD_Flash(void);
+
 
 extern union
 { 	
@@ -454,10 +479,12 @@ void interrupt ISRs(void)
 
 		TMR0 = 256 - 119;
 		LATB0 = 1;
+        //LATC6 = 1;
         if(RB5)	tmp = 1;
 		else	tmp = 0;
 
 		LATB0 = 0;
+        //LATC6 = 0;
 
 		switch(Speed_Work_Status)
 		{
@@ -581,8 +608,7 @@ void interrupt ISRs(void)
 			}
 		}
 
-
-//轉速為0時
+        //轉速為0時
 		if (_1S_CNT == 0)			
 		{
 				//RPM_Flag = 0;
@@ -595,10 +621,8 @@ void interrupt ISRs(void)
 			RPM_Zero = 0 ;
 			//LED3=0;	
 		}
-  	
-  	
 			
-//	5秒Time out旗標		
+        //	5秒Time out旗標		
 		if (Work_status == 1)
 		{
 			if (_5S_CNT == 0)
@@ -616,7 +640,6 @@ void interrupt ISRs(void)
 		}
 		
 		//錯誤模式下啟動拉纜計數
-		
 		if (Pull_Error == 1)
 		{
 			if (Pull_5S_CNT == 0)
@@ -630,18 +653,15 @@ void interrupt ISRs(void)
 //				if(Pull == 3)
 //					Pull = 0;
 			}
-			
 		}
 		DelayTime_Count ++;
 		LED1_Count ++;
 		LED2_Count ++;
 		LED3_Count ++;
 		LED13_Count ++;
+		ECU_Count ++;
 	}
-	
 }
-
-
 
 /******************************************************************************
 *   
@@ -668,11 +688,11 @@ void main(void)
 	LATC = 0;
 	LATD = 0;
 	
-	
 	TRISA = 0b00101011;
 	TRISB = 0b00100001;						//RB0 = RA2 input
 	//TRISC = 0b00011111;
 	TRISC = 0b01001111;
+    
 
 	TRISBbits.TRISB0 = 0;
 	
@@ -682,13 +702,12 @@ void main(void)
 	TRISD = 0b00110011;
 #endif
 
-
 	TRISE = 0b00000000;						//RE0,RE1,RE2由input改為output
 	
 	INTCON = 0b11000000;					//GIE & PEIE
 	//T1G_RPM_Init();
 	//T0
-	IOCBF5 = 0;
+	//IOCBF5 = 0;
 	//IOCBP5 = 1;
 	IOCBP5 = 0;
 	IOCBN5 = 1;
@@ -733,12 +752,11 @@ void main(void)
 #if(_4WDL_Position_EN)
 	_4WDL_Position();
 #endif		
-
-
-
-
-	
-												
+	//while(1)
+    //{
+    //    IOCBP5 = 0;
+	//	IOCBN5 = 1;
+    //}
 	Check_Motor_Status();
 	Check_Hand_Status();
 	switch(Gear_Status_NEW)
@@ -768,8 +786,12 @@ void main(void)
 //		LED1 = 1;
 //		while(1);
 		Special = 1;
+        IsFistBoot = 1;
 		//Pull = 1;
 		Gear_Status_NEW = _2WD;
+#if(FRONT_TEST)
+        Gear_Status_OLD = _2WD;
+#endif
 	}
 		
 	
@@ -831,7 +853,6 @@ void main(void)
 			LED3 = 0;
 		}
 	
-		
 //	if(Over_Speed_Error == 1)	
 //	{	LED13_FLASH(3); 
 //	
@@ -847,8 +868,6 @@ void main(void)
 		if(Voltage_Error  == 1)	{	LED1 = 1; } else{ LED1 = 0; }       //暫時關閉
 		
 #endif
-	
-		
 
 		while( Voltage_Error == 1)
 		{
@@ -858,7 +877,8 @@ void main(void)
 		if(((Speed < 15)&&(Voltage_Error == 0) && (Over_Speed_Error ==0)))	
 		{	
 			if(Pull_Error == 1 && Pull_Count < Pull_Value)												//錯誤模式下
-			{	if( Pull ==1)
+			{	
+                if( Pull ==1)
 				{	
 					Pull_Count ++;
 					switch(Gear_Status_OLD)
@@ -878,95 +898,94 @@ void main(void)
 					}
 					Pull_5S_CNT = Pull_Count_Val;
 				}
-				
 			}															   	
 			if (Gear_Status_NEW != Gear_Status_OLD)			 //把手狀態
-			{ Pull_Error = 0;														 //把手有變化，拉的次數重新計數
+			{ 
+                Pull_Error = 0;														 //把手有變化，拉的次數重新計數
 				Pull_Count = 0;
 				Pull_5S_CNT = Pull_Count_Val;
 				switch(Gear_Status_NEW)
 				{
 					case _4WDLOCK_1:
-							 if(Speed < 3)
+							 if(Speed < 5)
 							 {
 							 //	L1_Out = 0; L2_Out = 1; L3_Out = 1;
+								Gear_ECU_Status_OLD = Gear_Status_OLD;	
 							 	Change_Func(_4WDLOCK_1,Motor_4WL_Status);
 								Gear_Status_OLD = Gear_Status_NEW;	
 							 }
 					break;
 									
 					case _2WDLOCK:
-							 if(Speed < 3)
+							 if(Speed < 5)
 							 {
 							 //	L1_Out = 1; L2_Out = 0; L3_Out = 1;								//2WL輸出給ECU為"010"
+								Gear_ECU_Status_OLD = Gear_Status_OLD;	
 							 	Change_Func(_2WDLOCK,Motor_2WL_Status);	
 								Gear_Status_OLD = Gear_Status_NEW;				 		 
 							 }
 					break;
 		    
 					case _4WD_1:
-							 if(Speed < 5)
+							 if(Speed < 15)
 							 {
 								if ((Moving_Status == Motor_2WD_Status)&&(Speed >= 3)) // 20151230
 								{
 								//	L1_Out = 0; L2_Out = 0; L3_Out = 1;	
+                                    Gear_ECU_Status_OLD = Gear_Status_OLD;	
 							  		Change_Func(_4WD_1,Motor_4WD_Status);
 									Gear_Status_OLD = Gear_Status_NEW;
 								}
 								else if (Speed < 5)                       //20151230
 								{
 								//	L1_Out = 0; L2_Out = 0; L3_Out = 1;	
+                                    Gear_ECU_Status_OLD = Gear_Status_OLD;	
 							 		Change_Func(_4WD_1,Motor_4WD_Status);
 									Gear_Status_OLD = Gear_Status_NEW;
 								}
-							 		
 							 }
 					break;
 					
 					case _2WD:
-							if(Speed < 5)
+							if(Speed < 15)
 							{
 								if ((Moving_Status == Motor_4WD_Status)&& (Speed >= 3))   
 								{
 							//		L1_Out = 1; L2_Out = 0; L3_Out = 0;	
+                                    Gear_ECU_Status_OLD = Gear_Status_OLD;	
 							 		Change_Func(_2WD,Motor_2WD_Status);
 									Gear_Status_OLD = Gear_Status_NEW;	
 								}
-								else if (Speed < 3)
+								else if (Speed < 5)
 								{
 							//		L1_Out = 1; L2_Out = 0; L3_Out = 0;	
+                                    Gear_ECU_Status_OLD = Gear_Status_OLD;	
 							 		Change_Func(_2WD,Motor_2WD_Status);
 									Gear_Status_OLD = Gear_Status_NEW;	
 								}
 							}
 					break;
-
-
-
-switch(Motor_Temp)  //1221修改
-		{		
-			case Motor_2WD_Status :
-					 L1_Out = 1; L2_Out = 0; L3_Out = 0;	//0126修改
-					 break;
-			case Motor_2WL_Status :
-					 L1_Out = 0; L2_Out = 0; L3_Out = 0;    //0126修改	
-					 break;
-			case Motor_4WD_Status :
-					 L1_Out = 1; L2_Out = 0; L3_Out = 1;
-					 break;
-			case Motor_4WL_Status :	
-					 L1_Out = 1; L2_Out = 1; L3_Out = 0;
-					 break;	
-		}
-
-											 	 		 
+#if 0
+                    switch(Motor_Temp)  //1221修改
+                    {		
+                        case Motor_2WD_Status :
+                                 L1_Out = 1; L2_Out = 0; L3_Out = 0;	//0126修改
+                                 break;
+                        case Motor_2WL_Status :
+                                 L1_Out = 0; L2_Out = 0; L3_Out = 0;    //0126修改	
+                                 break;
+                        case Motor_4WD_Status :
+                                 L1_Out = 1; L2_Out = 0; L3_Out = 1;
+                                 break;
+                        case Motor_4WL_Status :	
+                                 L1_Out = 1; L2_Out = 1; L3_Out = 0;
+                                 break;	
+                    }
+#endif //end of 0
 				}
-				
-					  	
 			}
 			Check_Status();
-		  Output_ECU();
-			
+            Output_ECU();
 		}
 //		if(Error_Mode == 1)
 //		{	
@@ -978,7 +997,6 @@ switch(Motor_Temp)  //1221修改
 		
 	}
 }	
-
 
 /******************************************************************************
 *    Check_Hand_Status
@@ -1032,6 +1050,11 @@ void Check_Status(void)
 						 	Error_Mode = 0;
 						 	Pull_Error = 0;
 						 }
+                         else
+						 {		
+						 	Error_Mode = 1;
+						 	Pull_Error = 1;
+						 }
 						 break;
 				case _2WDLOCK:
 						 if(Motor_Temp == Motor_2WL_Status )
@@ -1039,6 +1062,11 @@ void Check_Status(void)
 						 	Error_Mode = 0;
 						 	Pull_Error = 0;
 						 }	
+                         else
+						 {		
+						 	Error_Mode = 1;
+						 	Pull_Error = 1;
+						 }
 						 break;
 				case _4WD_1:
 						 if(Motor_Temp == Motor_4WD_Status )
@@ -1046,12 +1074,22 @@ void Check_Status(void)
 						 	Error_Mode = 0;
 						 	Pull_Error = 0;
 						 }
+                         else
+						 {		
+						 	Error_Mode = 1;
+						 	Pull_Error = 1;
+						 }
 						 break;
 				case _2WD:
 						 if(Motor_Temp == Motor_2WD_Status )
 						 {		
 						 	Error_Mode = 0;
 						 	Pull_Error = 0;
+						 }
+                         else
+						 {		
+						 	Error_Mode = 1;
+						 	Pull_Error = 1;
 						 }
 						 break;
 				default :
@@ -1123,6 +1161,7 @@ void Change_Func(unsigned char Goto,unsigned char Status)
 				 		 			Front_Error = 1 ;                
 				 		 			Error_Exit_Func();                                     
 				 		 		}                                 
+                                //Gear_Status_NEW_4WDLOCK();
 				 		 }
 				 		 Front_Error = 0 ;
 				 		 Error_Exit_Func();
@@ -1146,6 +1185,7 @@ void Change_Func(unsigned char Goto,unsigned char Status)
 						 				Error_Exit_Func();                                  
 						 			}                                 
 						 		}	                                  		
+                                //Gear_Status_NEW_4WDLOCK();
 //						 }
 						 Back_Error = 0 ;
 						 Error_Exit_Func();
@@ -1167,6 +1207,7 @@ void Change_Func(unsigned char Goto,unsigned char Status)
 											Error_Exit_Func();
 										}
 									}
+                                    //Gear_Status_NEW_4WD();
 									
 								}
 											
@@ -1183,14 +1224,12 @@ void Change_Func(unsigned char Goto,unsigned char Status)
 											Error_Exit_Func();
 										}
 									}
+                                    //Gear_Status_NEW_4WD();
 									
 								}
 						 }
 						 Front_Error = 0 ;
 						 Error_Exit_Func();
-							
-							
-											
 
 /////////////////////////4WD後差馬達/////////////////////////////////////////////////////////////								
 /////////////////////////4WD後差馬達/////////////////////////////////////////////////////////////							
@@ -1209,6 +1248,7 @@ void Change_Func(unsigned char Goto,unsigned char Status)
 										Back_Error = 1 ;                
 										Error_Exit_Func();                                  
 									}                                 
+                                    //Gear_Status_NEW_4WD();
 								}	                                  		
 //							}
 							Back_Error = 0 ;
@@ -1231,6 +1271,7 @@ void Change_Func(unsigned char Goto,unsigned char Status)
 						 			Front_Error = 1 ;                
 						 			Error_Exit_Func();                                   
 						 		}                                 
+                                //Gear_Status_NEW_2WD();
 						 	}
 							Front_Error = 0 ;
 							Error_Exit_Func(); 
@@ -1252,6 +1293,7 @@ void Change_Func(unsigned char Goto,unsigned char Status)
 										Back_Error = 1 ;                
 										Error_Exit_Func();                                 
 									}                                 
+                                    //Gear_Status_NEW_2WD();
 								} 
 //							}
 							Back_Error = 0 ;
@@ -1271,6 +1313,7 @@ void Change_Func(unsigned char Goto,unsigned char Status)
 						 			Front_Error = 1 ;                
 						 			Error_Exit_Func();                                   
 						 		}                                 
+                                //Gear_Status_NEW_2WD();
 						 	}
 						 	Front_Error = 0 ;
 						 	Error_Exit_Func();                                  		
@@ -1292,6 +1335,7 @@ void Change_Func(unsigned char Goto,unsigned char Status)
 										Error_Exit_Func();
 									}
 								}
+                                //Gear_Status_NEW_2WD();
 							}
 							Back_Error = 0 ;
 							Error_Exit_Func();
@@ -1299,8 +1343,6 @@ void Change_Func(unsigned char Goto,unsigned char Status)
 									
 				break;
 			}
-			
-
 }
 
 
@@ -1437,6 +1479,13 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 				 		 			Front_Error = 1 ;                
 				 		 			Error_Exit_Func();                                     
 				 		 		}                                 
+                                /*
+                                if (Gear_ECU_Status_OLD == _2WD || Gear_ECU_Status_OLD == _2WDLOCK)
+                                    ECU_LOCK2W_FLASH(8);
+                                else if (Gear_ECU_Status_OLD == _4WD_1)
+                                    ECU_4WLOCK_FLASH(8);
+                                */
+                                
 				 		 }
 				 		 Front_Error = 0 ;
 				 		 Error_Exit_Func();
@@ -1457,6 +1506,12 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 						 				Back_Error = 1 ;                
 						 				Error_Exit_Func();                                  
 						 			}                                 
+                                    /*
+                                    if (Gear_ECU_Status_OLD == _2WD || Gear_ECU_Status_OLD == _2WDLOCK)
+                                        ECU_LOCK2W_FLASH(8);
+                                    else if (Gear_ECU_Status_OLD == _4WD_1)
+                                        ECU_4WLOCK_FLASH(8);
+                                    */
 						 		}	                                  		
 						 Back_Error = 0 ;
 						 Error_Exit_Func();
@@ -1477,6 +1532,9 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 											Front_Error = 1 ;					
 											Error_Exit_Func();
 										}
+                                        /*
+                                        ECU_4WLOCK_FLASH(8);
+                                        */
 									}
 									
 								}
@@ -1493,6 +1551,10 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 											Front_Error = 1 ;					
 											Error_Exit_Func();
 										}
+
+                                        /*
+                                        ECU_2W4W_FLASH(8);
+                                        */
 									}
 									
 								}
@@ -1500,8 +1562,6 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 						 Front_Error = 0 ;
 						 Error_Exit_Func();
 							
-							
-											
 
 /////////////////////////4WD後差馬達/////////////////////////////////////////////////////////////								
 /////////////////////////4WD後差馬達/////////////////////////////////////////////////////////////							
@@ -1518,6 +1578,12 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 										Back_Error = 1 ;                
 										Error_Exit_Func();                                  
 									}                                 
+                                    /*
+                                    if (Gear_ECU_Status_OLD == _2WD || Gear_ECU_Status_OLD == _2WDLOCK)
+                                        ECU_2W4W_FLASH(8);
+                                    else if (Gear_ECU_Status_OLD == _4WDLOCK_1)
+                                        ECU_4WLOCK_FLASH(8);
+                                    */
 								}	                                  		
 							Back_Error = 0 ;
 							Error_Exit_Func();
@@ -1539,6 +1605,12 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 						 			Front_Error = 1 ;                
 						 			Error_Exit_Func();                                   
 						 		}                                 
+                                /*
+                                if (Gear_ECU_Status_OLD == _4WDLOCK_1)
+                                    ECU_LOCK2W_FLASH(8);
+                                else if (Gear_ECU_Status_OLD == _4WD_1)
+                                    ECU_2W4W_FLASH(8);
+                                */
 						 	}
 							Front_Error = 0 ;
 							Error_Exit_Func(); 
@@ -1551,14 +1623,21 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 							Motor2_W_out = 1;
 							Work_status = 1;
 							_5S_CNT = _5S_Val;
-								while((Motor2_B_in == 1) && (Back_Error == 0) ) 
-								{ Motor2_R();	                                        
-									if (Error_Flag == 1 )             
-									{	           
-										Back_Error = 1 ;                
-										Error_Exit_Func();                                 
-									}                                 
-								} 
+                            while((Motor2_B_in == 1) && (Back_Error == 0) ) 
+                            { 
+                                Motor2_R();	                                        
+                                if (Error_Flag == 1 )             
+                                {	           
+                                    Back_Error = 1 ;                
+                                    Error_Exit_Func();                                 
+                                }                                 
+                                /*
+                                if (Gear_ECU_Status_OLD == _4WDLOCK_1)
+                                    ECU_LOCK2W_FLASH(8);
+                                else if (Gear_ECU_Status_OLD == _4WD_1)
+                                    ECU_2W4W_FLASH(8);f
+                                */
+                            } 
 							Back_Error = 0 ;
 							Error_Exit_Func();
 #endif //end of !FRONT_TEST
@@ -1576,6 +1655,12 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 						 			Front_Error = 1 ;                
 						 			Error_Exit_Func();                                   
 						 		}                                 
+                                /*
+                                if (Gear_ECU_Status_OLD == _4WDLOCK_1)
+                                    ECU_LOCK2W_FLASH(8);
+                                else if (Gear_ECU_Status_OLD == _4WD_1)
+                                    ECU_2W4W_FLASH(8);
+                                */
 						 	}
 						 	Front_Error = 0 ;
 						 	Error_Exit_Func();                                  		
@@ -1596,6 +1681,12 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 										Back_Error = 1 ;
 										Error_Exit_Func();
 									}
+                                    /*
+                                     if (Gear_ECU_Status_OLD == _4WDLOCK_1)
+                                        ECU_LOCK2W_FLASH(8);
+                                    else if (Gear_ECU_Status_OLD == _4WD_1)
+                                        ECU_2W4W_FLASH(8);
+                                    */
 								}
 							}
 							Back_Error = 0 ;
@@ -1604,8 +1695,6 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
 									
 				break;
 			}
-			
-
 }
 
 
@@ -1679,6 +1768,139 @@ void LED13_FLASH(unsigned int Time)
 	 
 }
 
+/******************************************************************************
+*    ECU_LOCK_FLASH
+******************************************************************************/
+void ECU_LOCK_FLASH(unsigned int Time)
+{	
+	if(ECU_Count >= Time)
+	{	
+        ECU_Count =0;
+        L1_Toggle();
+        L2_Toggle();
+        L3_Out = 0;
+	}
+}
+
+/******************************************************************************
+*    ECU_2W_4W_FLASH
+******************************************************************************/
+void ECU_2W4W_FLASH(unsigned int Time)
+{	
+	if(ECU_Count >= Time)
+	{	
+        ECU_Count =0;
+        L1_Out = 1;
+        L2_Out = 0;
+        L3_Toggle();
+	}
+}
+
+/******************************************************************************
+*    ECU_4W_LOCK_FLASH
+******************************************************************************/
+void ECU_4WLOCK_FLASH(unsigned int Time)
+{	
+	if(ECU_Count >= Time)
+	{	
+        ECU_Count =0;
+        L1_Out = 1;
+        L2_Toggle();
+        L3_Toggle();
+	}
+}
+
+/******************************************************************************
+*    ECU_LOCK_2W_FLASH
+******************************************************************************/
+void ECU_LOCK2W_FLASH(unsigned int Time)
+{	
+	if(ECU_Count >= Time)
+	{	
+        ECU_Count =0;
+        L1_Out = 1;
+        L2_Toggle();
+        L3_Out = 0;
+	}
+}
+
+/******************************************************************************
+*   Gear Status New 4WDLOCK 
+*   for ECU Ouput Flash
+******************************************************************************/
+void Gear_Status_NEW_4WDLOCK_Flash(void)
+{
+    if (Gear_ECU_Status_OLD == _2WD || Gear_ECU_Status_OLD == _2WDLOCK)
+    {
+        if (IsFistFlash)
+        {
+            L1_Out = 1; L2_Out = 0; L3_Out = 0; // 2W
+            IsFistFlash = 0;
+        }
+        ECU_LOCK2W_FLASH(4);
+    }
+    else if (Gear_ECU_Status_OLD == _4WD_1)
+    {
+        if (IsFistFlash)
+        {
+            L1_Out = 1; L2_Out = 0; L3_Out = 1; // 4W
+            IsFistFlash = 0;
+        }
+        ECU_4WLOCK_FLASH(4);
+    }
+}
+
+/******************************************************************************
+*   Gear Status New 4WD 
+*   for ECU Ouput Flash
+******************************************************************************/
+void Gear_Status_NEW_4WD_Flash(void)
+{
+    if (Gear_ECU_Status_OLD == _2WD || Gear_ECU_Status_OLD == _2WDLOCK)
+    {
+        if (IsFistFlash)
+        {
+            L1_Out = 1; L2_Out = 0; L3_Out = 0; // 2W
+            IsFistFlash = 0;
+        }
+        ECU_2W4W_FLASH(4);
+    }
+    else if (Gear_ECU_Status_OLD == _4WDLOCK_1)
+    {
+        if (IsFistFlash)
+        {
+            L1_Out = 1; L2_Out = 1; L3_Out = 0; // 4WL
+            IsFistFlash = 0;
+        }
+        ECU_4WLOCK_FLASH(4);
+    }
+}
+
+/******************************************************************************
+*   Gear Status New 2WD and 2WDLOCK 
+*   for ECU Ouput Flash
+******************************************************************************/
+void Gear_Status_NEW_2WD_Flash(void)
+{
+    if (Gear_ECU_Status_OLD == _4WDLOCK_1)
+    {
+        if (IsFistFlash)
+        {
+            L1_Out = 1; L2_Out = 1; L3_Out = 0; // 4WL
+            IsFistFlash = 0;
+        }
+        ECU_LOCK2W_FLASH(4);
+    }
+    else if (Gear_ECU_Status_OLD == _4WD_1)
+    {
+        if (IsFistFlash)
+        {
+            L1_Out = 1; L2_Out = 0; L3_Out = 1; // 4W
+            IsFistFlash = 0;
+        }
+        ECU_2W4W_FLASH(4);
+    }
+}
 /******************************************************************************
 *    ReadFeedback
 ******************************************************************************/
@@ -1912,8 +2134,9 @@ void Check_Motor_Status(void)
   			 for(i = 0 ; i < 200 ; i++);
   			 Motor_Front_Status = PORTA & 0x0B;						//前差RA0/W,RA1/B,RA3/Y
  				 if( Motor_Front_Status == 0x03)							//斷線狀態或UnKnow狀態
- 				 {	Error_Mode = 1;
- 				 		Motor_Remove = 1;
+ 				 {	
+                     Error_Mode = 1;
+                     Motor_Remove = 1;
  				 }
  				 else	
  				 {	//OLD_Motor_4WDLOCK_Gear = 1;									//4WL的狀態
@@ -1927,13 +2150,7 @@ void Check_Motor_Status(void)
  		default:
   				 Error_Mode = 1;
  				 //Gear_Status_OLD = Motor_Temp;
- 				 
- 			
  	}		
-	
-
-  
-
 }
 				
 
@@ -1942,13 +2159,48 @@ void Check_Motor_Status(void)
 ******************************************************************************/
 void Output_ECU(void)
 {	
-	
+    if (Error_Mode == 0)
+    {
+        IsFistFlash = 1;
+        IsFistBoot = 0;
+    }
 	//if(	Error_Mode == 1|| Handback_Error == 1)
 	if(	Handback_Error == 1)
 	{
 		L1_Out = 1; L2_Out = 1; L3_Out = 1;
         //LED1 = 1;
 	}	
+    //else if (Error_Mode == 1)
+    else if(Pull_Error == 1 && Pull_Count >= Pull_Value)												//錯誤模式下
+	{
+        switch (Gear_Status_NEW)
+        {
+            case _4WDLOCK_1:
+                if (Motor_Remove == 1 && IsFistBoot == 1)
+                {
+                    ECU_LOCK_FLASH(4);
+                }
+                else
+                {
+                    Gear_Status_NEW_4WDLOCK_Flash();
+                }
+                break;	
+            case _2WDLOCK:
+                Gear_Status_NEW_2WD_Flash();
+                
+                break;
+            case _4WD_1:
+                Gear_Status_NEW_4WD_Flash();
+                
+                break;
+            case _2WD:
+                Gear_Status_NEW_2WD_Flash();
+                
+                break;
+        }
+		
+	}	
+
 //	if(	Error_Mode == 0 && Handback_Error == 0)	
 //	{	switch(Moving_Status)
 //		{		
@@ -1971,15 +2223,15 @@ void Output_ECU(void)
 //		}
 //	if(	Error_Mode == 0 && Handback_Error == 0)	
 	//if(	Handback_Error == 0)	
-	else
+	else if (Error_Mode == 0 )
 	{	
-		switch(Motor_Temp)  // 1221修改
+		switch(Motor_Temp)  
 		{		
 			case Motor_2WD_Status :
-					 L1_Out = 1; L2_Out = 0; L3_Out = 0;	//0111修改
+					 L1_Out = 1; L2_Out = 0; L3_Out = 0;	
 					 break;
 			case Motor_2WL_Status :
-					 L1_Out = 0; L2_Out = 0; L3_Out = 0;	//0111修改
+					 L1_Out = 0; L2_Out = 0; L3_Out = 0;	
 					 break;
 			case Motor_4WD_Status :
 					 L1_Out = 1; L2_Out = 0; L3_Out = 1;

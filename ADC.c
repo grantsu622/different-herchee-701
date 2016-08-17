@@ -1,6 +1,8 @@
 #include <pic.h>
 #include "main.h"
 
+#define NEWADCFUNC  1
+
 unsigned char ADC_Val[4] = {0,0,0,0};
 unsigned char ADC_Cnt = 0,ADC_Temp = 0,i,j;
 unsigned int ADC_Data , FVR_Data = 0,Normal_Data = 0;
@@ -12,24 +14,44 @@ unsigned char UnderVoltage_Error  = 0;
 //ADC砞﹚惠把σ筿溃秖代
 
 // 1000 5V = 5000 , 4.7V = 4700 , 2V = 2000
-#define OverVoltage			0xC8//3920 / ( 5000 / 256 )				//16V
+//#define OverVoltage			0xC8//3920 / ( 5000 / 256 )				//16V
 //#define OverVoltage			0xC7
 //#define UnderVoltage		0x60//1940 / ( 5000 / 256 )				//7.5V
 //#define ADC_LowVoltage  0x64															//7.5VADCъ计
-#define ADC_LowVoltage  0x6C															//7.5VADCъ计
-#define FVR_LowVoltage  0x35															//7.5VFVRъ计
+//#define ADC_LowVoltage  0x6C															//7.5VADCъ计
+//#define FVR_LowVoltage  0x35															//7.5VFVRъ计
 //#define OverVoltage		3880 / ( 5000 / 256 )
 //#define UnderVoltage	1895 / ( 5000 / 256 )
 //#define OverVoltage		3880 / ( 5000 / 256 )						//龟悔筿溃4.07V
 //#define OverVoltage		4420 / ( 5000 / 256 )
 //#define UnderVoltage	2880 / ( 5000 / 256 )						//龟悔筿溃1.798V
 
+#if(NEWADCFUNC)
+//#define ADC_LowVoltage  0x68  //8V
+#define ADC_LowVoltage  0x77    //9V
+#define OverVoltage		0xD6    //16V
+
+#else
+#define ADC_LowVoltage  0x6C															//7.5VADCъ计
+#define FVR_LowVoltage  0x35															//7.5VFVRъ计
+#define OverVoltage			0xC8//3920 / ( 5000 / 256 )				//16V
+
+#endif
+
 unsigned int Init_ADC(void)
 {
-	
-	
+#if(NEWADCFUNC)
+	FVRCON = 0b11000011 ;	//ADC Fixed Voltage Reference Peripheral output is 1x (4.096V)
+    
+    // ADFM sign_magnitude; ADNREF VSS; ADPREF FVR; ADCS Frc; 
+	ADCON1 = 0b01110011;								//计綼オ
+    
+    // ADRMD 10_bit_mode; GO_nDONE stop; ADON enabled; CHS AN4;
+	ADCON0 = 0b10010001;
+#else	
 	ADCON0 = 0b10010001;																//10bit妓
 	ADCON1 = 0b01110000;																//计綼オ
+#endif
 	ADCON2 = 0xFF;
 	NOP();
 	NOP();
@@ -81,6 +103,15 @@ unsigned int FVR_Test(void)
 
 void ADC_Func(void)
 {	
+
+#if(NEWADCFUNC)
+    Normal_Data =	Init_ADC();
+    
+    if ( (Normal_Data <= ADC_LowVoltage) || (Normal_Data >= OverVoltage))
+        Voltage_Error = 1;
+    else
+        Voltage_Error = 0;
+#else
 	FVR_Data = FVR_Test();
 	
 	Normal_Data =	Init_ADC();
@@ -107,7 +138,7 @@ void ADC_Func(void)
 		
 	}	
 		
-			
+#endif		
 //			if (ADC_Data > OverVoltage)
 //			{
 //				Voltage_Error = 1;
