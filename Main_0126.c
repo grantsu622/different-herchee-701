@@ -213,7 +213,7 @@ __CONFIG(WRT_ALL & PLLEN_OFF & STVREN_ON & LVP_OFF & BORV_HI);
 #define LED_EN				1
 #define _4WD_Test_EN	 	0
 #define No_Feedback_EN     	1
-#define FRONT_TEST 1 //前差測試
+#define FRONT_TEST 0 //前差測試
 #define  AUTORUN   0 //自動執行手把切換
 unsigned char autorunCunt = 0;
 
@@ -223,6 +223,7 @@ unsigned char autorunCunt = 0;
 #define LOW			0
 //#define _5S_Val	12	//1.5秒
 #define _5S_Val		23	//3秒
+//#define _5S_Val		39	//5秒 20160923
 //#define _5S_Val	8
 //#define _3S_Val	24												//3秒
 //#define PAC1710_Error_val		10
@@ -334,6 +335,7 @@ unsigned char	OLD_Motor_4WD_Gear 	= 0;
 unsigned char	OLD_Motor_2WD_Gear 	= 0;    
 unsigned char	OLD_Motor_4WDLOCK_Gear 	= 0;
 unsigned char	Motor_Remove = 0;
+unsigned char	Motor_Back_Remove = 0;
 #if(_4WD_Test_EN)
 unsigned char Motor_4WD_Gear_Test = 0;		
 #endif
@@ -348,7 +350,7 @@ unsigned char	Motor_Temp	      	= 0;
 #define	Motor1_Status_2WL 	 	0b00001000	//前差RA0/W,RA1/B,RA3/Y
 #define	Motor1_Status_4WL 	 	0b00001010	//前差RA0/W,RA1/B,RA3/Y
 #define	Motor2_Status_UnLock 	0b00000010	//後差RC0/W,RC1/B,RC2/Y
-#define	Motor2_Status_Lock 	 	0b00000100	//後差RC0/W,RC1/B,RC2/Y
+#define	Motor2_Status_Lock 	 	0b00000110	//後差RC0/W,RC1/B,RC2/Y
 
 //以下定義值前4bit為前差馬達狀態，後4bit為後差馬達狀態
 //Motor_Status_Now 為前後馬達合成後的狀態
@@ -359,9 +361,9 @@ unsigned char	Motor_Temp	      	= 0;
 #define	Motor_4WL_Status	  0b00001010    //0x0A
 #else
 #define	Motor_2WD_Status	  0b10000010	//0x82
-#define	Motor_2WL_Status	  0b10000100	//0x84
-#define	Motor_4WD_Status	  0b00100100	//0x24
-#define	Motor_4WL_Status	  0b10100100	//0xA4
+#define	Motor_2WL_Status	  0b10000110	//0x86
+#define	Motor_4WD_Status	  0b00100110	//0x26
+#define	Motor_4WL_Status	  0b10100110	//0xA6
 #endif //end of FRONT_TEST
 ////////////////////////////////////把手///////////////////////////////////////
 
@@ -1088,19 +1090,27 @@ void Check_Status(void)
     switch(Gear_Status_NEW)
     {
         case _4WDLOCK_1:
+#if (FRONT_TEST)
             if((Motor_Temp == Motor_4WL_Status) && (Motor_Remove == 0))
+#else
+            if((Motor_Temp == Motor_4WL_Status) && (Motor_Remove == 0) && (Motor_Back_Remove == 0))
+#endif
             {		
                 Error_Mode = 0;
                 Pull_Error = 0;
             }
-            else
+            else  //20160923
             {		
                 Error_Mode = 1;
                 Pull_Error = 1;
             }
             break;
         case _2WDLOCK:
+#if (FRONT_TEST)
             if(Motor_Temp == Motor_2WL_Status )
+#else
+            if((Motor_Temp == Motor_2WL_Status ) && (Motor_Back_Remove == 0))
+#endif
             {		
                 Error_Mode = 0;
                 Pull_Error = 0;
@@ -1112,7 +1122,11 @@ void Check_Status(void)
             }
             break;
         case _4WD_1:
+#if (FRONT_TEST)
             if(Motor_Temp == Motor_4WD_Status )
+#else
+            if((Motor_Temp == Motor_4WD_Status ) && (Motor_Back_Remove == 0))
+#endif
             {		
                 Error_Mode = 0;
                 Pull_Error = 0;
@@ -1143,9 +1157,6 @@ void Check_Status(void)
             //				else
             //					Pull_Timer_Star = 0;	 
     }
-
-
-
 }	
 
 /******************************************************************************
@@ -1208,7 +1219,7 @@ void Change_Func(unsigned char Goto,unsigned char Status)
             /////////////////////////4WL後差馬達/////////////////////////////////////////////////////////////
             /////////////////////////4WL後差馬達/////////////////////////////////////////////////////////////						
 #if(!FRONT_TEST)
-            Motor2_W_out = 1;
+            Motor2_Y_out = 1;
             Work_status = 1;
             _5S_CNT = _5S_Val;
 
@@ -1216,7 +1227,7 @@ void Change_Func(unsigned char Goto,unsigned char Status)
             // {	
             while((Motor2_B_in == 1) && (Back_Error == 0) ) 
             {                                                
-                Motor2_R();          
+                Motor2_F();          
                 if (Error_Flag == 1 )             
                 {	                        
                     Back_Error = 1 ;                
@@ -1272,14 +1283,14 @@ void Change_Func(unsigned char Goto,unsigned char Status)
             /////////////////////////4WD後差馬達/////////////////////////////////////////////////////////////							
 #if(!FRONT_TEST)
             Work_status = 1;
-            Motor2_W_out = 1;
+            Motor2_Y_out = 1;
             _5S_CNT = _5S_Val;
 
             //							if(Gear_Status_OLD == _2WD)											//2W位置						 	
             //						 	{
             while((Motor2_B_in == 1) && (Back_Error == 0) ) 
             {                                         
-                Motor2_R();                                  
+                Motor2_F();                                  
                 if (Error_Flag == 1 )             
                 {	
                     Back_Error = 1 ;                
@@ -1314,14 +1325,14 @@ void Change_Func(unsigned char Goto,unsigned char Status)
             /////////////////////////2WL後差馬達/////////////////////////////////////////////////////////////
             /////////////////////////2WL後差馬達/////////////////////////////////////////////////////////////						
 #if(!FRONT_TEST)
-            Motor2_W_out = 1;
+            Motor2_Y_out = 1;
             Work_status = 1;
             _5S_CNT = _5S_Val;
             //if(Gear_Status_OLD == _2WD)	//2W位置
             //{
             while((Motor2_B_in == 1) && (Back_Error == 0) ) 
             { 
-                Motor2_R();	                                        
+                Motor2_F();	                                        
                 if (Error_Flag == 1 )             
                 {	           
                     Back_Error = 1 ;                
@@ -1362,7 +1373,7 @@ void Change_Func(unsigned char Goto,unsigned char Status)
             {
                 while( (Back_Error == 0) && (Motor2_Y_in == 1))
                 {	
-                    Motor2_F();
+                    Motor2_R();
                     if (Error_Flag == 1 )
                     {	
                         Back_Error = 1 ;
@@ -1523,13 +1534,13 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
             /////////////////////////4WL後差馬達/////////////////////////////////////////////////////////////
             /////////////////////////4WL後差馬達/////////////////////////////////////////////////////////////						
 #if(!FRONT_TEST)
-            Motor2_W_out = 1;
+            Motor2_Y_out = 1;
             Work_status = 1;
             _5S_CNT = _5S_Val;
 
             while((Motor2_B_in == 1) && (Back_Error == 0) ) 
             {                                                
-                Motor2_R();          
+                Motor2_F();          
                 if (Error_Flag == 1 )             
                 {	                        
                     Back_Error = 1 ;                
@@ -1595,12 +1606,12 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
             /////////////////////////4WD後差馬達/////////////////////////////////////////////////////////////							
 #if(!FRONT_TEST)
             Work_status = 1;
-            Motor2_W_out = 1;
+            Motor2_Y_out = 1;
             _5S_CNT = _5S_Val;
 
             while((Motor2_B_in == 1) && (Back_Error == 0) ) 
             {                                         
-                Motor2_R();                                  
+                Motor2_F();                                  
                 if (Error_Flag == 1 )             
                 {	
                     Back_Error = 1 ;                
@@ -1645,12 +1656,12 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
             /////////////////////////2WL後差馬達/////////////////////////////////////////////////////////////
             /////////////////////////2WL後差馬達/////////////////////////////////////////////////////////////						
 #if(!FRONT_TEST)
-            Motor2_W_out = 1;
+            Motor2_Y_out = 1;
             Work_status = 1;
             _5S_CNT = _5S_Val;
             while((Motor2_B_in == 1) && (Back_Error == 0) ) 
             { 
-                Motor2_R();	                                        
+                Motor2_F();	                                        
                 if (Error_Flag == 1 )             
                 {	           
                     Back_Error = 1 ;                
@@ -1699,7 +1710,7 @@ void Error_Mode_Func(unsigned char Goto,unsigned char Status)
             {
                 while( (Back_Error == 0) && (Motor2_Y_in == 1))
                 {	
-                    Motor2_F();
+                    Motor2_R();
                     if (Error_Flag == 1 )
                     {	
                         Back_Error = 1 ;
@@ -2141,12 +2152,50 @@ void Check_Motor_Status(void)
             Error_Mode = 0;
             break;
         case Motor_2WL_Status :
+#if(FRONT_TEST)
             Gear_Status_OLD = _2WDLOCK;
             Error_Mode = 0;
+#else
+            Motor2_Y_out = 1;
+            for(i = 0 ; i < 200 ; i++);
+            for(i = 0 ; i < 200 ; i++);
+            Motor_Back_Status =  PORTC & 0x07;						//後差RC0/W,RC1/B,RC2/Y
+            if( Motor_Back_Status == 0x03)			//斷線狀態或UnKnow狀態
+            {	
+                Error_Mode = 1;
+                Motor_Back_Remove = 1;
+            }
+            else	
+            {
+                Motor_Back_Remove = 0;
+                Gear_Status_OLD = _2WDLOCK;
+                Error_Mode = 0;
+            }
+            Motor2_Y_out = 0;
+#endif
             break;
         case Motor_4WD_Status :	
+#if(FRONT_TEST)
             Gear_Status_OLD = _4WD_1;
             Error_Mode = 0;
+#else
+            Motor2_Y_out = 1;
+            for(i = 0 ; i < 200 ; i++);
+            for(i = 0 ; i < 200 ; i++);
+            Motor_Back_Status =  PORTC & 0x07;						//後差RC0/W,RC1/B,RC2/Y
+            if( Motor_Back_Status == 0x03)			//斷線狀態或UnKnow狀態
+            {	
+                Error_Mode = 1;
+                Motor_Back_Remove = 1;
+            }
+            else	
+            {
+                Motor_Back_Remove = 0;
+                Gear_Status_OLD = _4WD_1;
+                Error_Mode = 0;
+            }
+            Motor2_Y_out = 0;
+#endif
             break;	
 
         case Motor_4WL_Status :	
@@ -2166,6 +2215,24 @@ void Check_Motor_Status(void)
                 Error_Mode = 0;
             }
             Motor1_Y_out = 0;
+#if(!FRONT_TEST)
+            Motor2_Y_out = 1;
+            for(i = 0 ; i < 200 ; i++);
+            for(i = 0 ; i < 200 ; i++);
+            Motor_Back_Status =  PORTC & 0x07;						//後差RC0/W,RC1/B,RC2/Y
+            if( Motor_Back_Status == 0x03)			//斷線狀態或UnKnow狀態
+            {	
+                Error_Mode = 1;
+                Motor_Back_Remove = 1;
+            }
+            else	
+            {
+                Motor_Back_Remove = 0;
+                Gear_Status_OLD = _4WDLOCK_1;
+                Error_Mode = 0;
+            }
+            Motor2_Y_out = 0;
+#endif
             break;
 
         default:
