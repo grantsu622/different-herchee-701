@@ -214,11 +214,10 @@ __CONFIG(WRT_ALL & PLLEN_OFF & STVREN_ON & LVP_OFF & BORV_HI);
 #define _4WD_Test_EN	 	0
 #define No_Feedback_EN     	1
 
-
 ////////////////////////////////// 前後差作動定義//////////////////////////////////////
 #define FRONT_TEST 0 //單獨前差作動
-#define BACK_TEST 1 //單獨後差作動
-#define  AUTORUN   0 //自動執行手把切換
+#define BACK_TEST  1 //單獨後差作動
+#define  AUTORUN   0 //自動執行手把切換，長時間驗證
 unsigned char autorunCunt = 0;
 
 #define	OUTPUT		0
@@ -242,7 +241,7 @@ unsigned char autorunCunt = 0;
 #define Pull_Count_Val		15	//2秒 20160817
 unsigned char Pull_Count = 0;//= Pull_Value;
 unsigned char Pull = 0;
-unsigned char Pull_Timer_Star = 0;	//錯誤模式下啟動拉纜繩計時旗標
+//unsigned char Pull_Timer_Star = 0;	//錯誤模式下啟動拉纜繩計時旗標
 unsigned char Pull_Error      = 0;
 unsigned char Pull_5S_CNT = Pull_Count_Val;
 
@@ -318,7 +317,7 @@ unsigned char	TD_Temp;
 unsigned char OLD_4WD_Test_Status = 0;
 #endif
 
-unsigned char Now_Status = 0;
+//unsigned char Now_Status = 0;
 unsigned char TD_CNT;
 
 
@@ -343,10 +342,10 @@ unsigned char TD_CNT;
 //unsigned char	Motor1_2WL 	= 0; 		           	
 //unsigned char	Motor1_4WL 	= 0;		                  
 //unsigned char	Motor2_Lock = 0;
-unsigned char	OLD_Motor_2WDLOCK_Gear 	= 0;
-unsigned char	OLD_Motor_4WD_Gear 	= 0;		 
-unsigned char	OLD_Motor_2WD_Gear 	= 0;    
-unsigned char	OLD_Motor_4WDLOCK_Gear 	= 0;
+//unsigned char	OLD_Motor_2WDLOCK_Gear 	= 0;
+//unsigned char	OLD_Motor_4WD_Gear 	= 0;		 
+//unsigned char	OLD_Motor_2WD_Gear 	= 0;    
+//unsigned char	OLD_Motor_4WDLOCK_Gear 	= 0;
 unsigned char	Motor_Remove = 0;
 unsigned char	Motor_Back_Remove = 0;
 #if(_4WD_Test_EN)
@@ -355,8 +354,8 @@ unsigned char Motor_4WD_Gear_Test = 0;
 
 unsigned char Motor_Front_Status	= 0;
 unsigned char Motor_Back_Status		= 0;
-unsigned char Motor_Status_Now		= 0;
-unsigned char	Motor_OLD_Status	= 0;
+//unsigned char Motor_Status_Now		= 0;
+//unsigned char	Motor_OLD_Status	= 0;
 unsigned char	Motor_Temp	      	= 0;
 
 #define	Motor1_Status_4WD 		0b00000010	//前差RA0/W,RA1/B,RA3/Y
@@ -389,16 +388,16 @@ unsigned char	Motor_Temp	      	= 0;
 
 unsigned char Gear_Status_NEW;
 unsigned char Gear_Status_OLD = 0;
-unsigned int Init_Flag = 0;
-unsigned int Init_Final = 0;
+//unsigned int Init_Flag = 0;
+//unsigned int Init_Final = 0;
 unsigned char Gear_ECU_Status_OLD	= 0;
 
 ////////////////////////////////////RPM///////////////////////////////////////
 
-unsigned char RPM_Flag 	= 0;
-unsigned int 	PRM_NEW;
-unsigned int	RPM_OLD = 0;
-unsigned int	RPM_VAL;
+//unsigned char RPM_Flag 	= 0;
+//unsigned int 	PRM_NEW;
+//unsigned int	RPM_OLD = 0;
+//unsigned int	RPM_VAL;
 unsigned char	RPM_Zero = 0 ;
 
 ////////////////////////////////////錯誤旗標///////////////////////////////////////
@@ -406,7 +405,7 @@ unsigned char	RPM_Zero = 0 ;
 unsigned int DelayTime_Count = 0; 
 unsigned char Error_Flag = 0;		//5秒Time out旗標
 //unsigned char PAC1710_Error = 0;	//過壓、欠壓、過流旗標
-unsigned char RPM_Speed_Error	= 0 ;
+//unsigned char RPM_Speed_Error	= 0 ;
 //unsigned char	Overcurrent_Error = 0;
 unsigned char Over_Speed_Error = 0;
 //unsigned char	_5S_Flage_Error = 0;
@@ -421,16 +420,16 @@ extern unsigned char Voltage_Error;		//max2014
 unsigned char _1S_CNT = 8;		//RPM訊號斷線超過1秒偵測
 unsigned char	_5S_CNT = _5S_Val;								
 unsigned char Work_status = 0;
-unsigned int  _5S_Status_Temp;
+//unsigned int  _5S_Status_Temp;
 
-unsigned int LED1_Count = 0;
+//unsigned int LED1_Count = 0;
 unsigned int LED2_Count = 0;
-unsigned int LED3_Count = 0;
+//unsigned int LED3_Count = 0;
 unsigned int LED13_Count = 0;
 unsigned int ECU_Count = 0;
 
-unsigned char Special = 0,i,j,k;
-unsigned int  temp;
+unsigned char Special = 0,i,j;//,k;
+//unsigned int  temp;
 unsigned char Moving_Status;
 
 
@@ -440,6 +439,15 @@ unsigned char IsFistBoot = 0;
 unsigned char Speed = 30,Speed_U = 0,Speed_H = 0,Speed_L = 0;
 unsigned char Speed_Work_Status = 0,Seep_256ms_Cnt = 2,Speed_rd = 0;;
 ///////////////////////////////
+
+////////////////////////////////////後差馬達///////////////////////////////////////
+#define SPEED_CUNT_MAX  52
+#define SPEED_CUNT_3KM  24
+#define SPEED_CUNT_5KM  48 
+unsigned char IsStart = 0;  //儀表訊號開始
+unsigned char IsUnlock = 0;  //儀表訊號 解鎖
+unsigned int SpeedCunt = 0;    //計數plus間之時間(單位128ms)
+unsigned char UnlockCunt = 0;    //計數低於速度下可以快速切換
 
 void Motor1_F(void);
 void Motor1_R(void);
@@ -499,7 +507,7 @@ void interrupt ISRs(void)
     //{
     INTF = 0;
     //}
-
+#if(!BACK_TEST)
     if ((TMR0IF == 1) && (TMR0IE == 1))
     {
 
@@ -602,6 +610,80 @@ void interrupt ISRs(void)
             //	LATB0 = 0;
         }
     }
+#else
+    if ((TMR0IF == 1) && (TMR0IE == 1))
+    {
+
+        TMR0IF = 0;
+
+        TMR0 = 256 - 256;
+
+        if (SpeedCunt > SPEED_CUNT_MAX)
+        {
+            SpeedCunt = 52;
+            Speed = 14;
+            UnlockCunt++;
+            if (UnlockCunt > 3) UnlockCunt = 4;
+
+        }
+        else
+        {
+            SpeedCunt++;
+
+        }
+    }
+
+    if(IOCIE & IOCIF)	 	
+    {
+        if(IOCBF5)
+        {
+            TMR0IE = 0;
+            IOCBF5 = 0;
+            IOCIF = 0;
+
+#if 0
+            if (IsStart)
+            {
+                IsStart = 0;
+                IOCIE = 0;
+                return;
+            }
+            else
+            {
+                IsStart = 1;
+
+            }
+#endif
+
+            if (SpeedCunt >= SPEED_CUNT_5KM)
+            {
+                SpeedCunt = 0;
+                Speed = 14;
+                UnlockCunt++;
+                if (UnlockCunt > 2) UnlockCunt = 4;
+
+            }
+            else
+            {
+                if (UnlockCunt > 2) UnlockCunt--;
+                else
+                {
+                    Speed = 16;
+                    SpeedCunt = 0;
+                    UnlockCunt = 0;
+                }
+
+            }
+
+            IOCIE = 0;
+
+            TMR0 = 256 - 256;
+            TMR0IF = 0;
+            TMR0IE = 1;
+        }
+    }
+
+#endif // end of !BACK_TEST
     // ==================T2計算方式===========================================  
     //			1/(8M/4/16/64/250)= 128 msec
     //
@@ -611,6 +693,7 @@ void interrupt ISRs(void)
     if(TMR2IF & TMR2IE)				// 128mS
     {	
         TMR2IF = 0;
+#if(!BACK_TEST)
         T1GGO = 1;
 
         //轉速錯誤	
@@ -649,6 +732,34 @@ void interrupt ISRs(void)
             RPM_Zero = 0 ;
             //LED3=0;	
         }
+#else
+        if (UnlockCunt > 2) Speed = 14;
+
+        if(IOCIE == 0)
+        {
+            IOCBF5 = 0;
+            IOCIF = 0;
+
+            IOCIE = 1;
+
+        }
+#if 0    
+        if (SpeedCunt > SPEED_CUNT_MAX)
+        {
+            SpeedCunt = 0;
+            Speed = 14;
+            UnlockCunt++;
+            if (UnlockCunt > 3) UnlockCunt = 4;
+
+        }
+        else
+        {
+            SpeedCunt++;
+
+        }
+#endif
+
+#endif // end of !BACK_TEST
 
         //	5秒Time out旗標		
         if (Work_status == 1)
@@ -683,9 +794,9 @@ void interrupt ISRs(void)
             }
         }
         DelayTime_Count ++;
-        LED1_Count ++;
+        //LED1_Count ++;
         LED2_Count ++;
-        LED3_Count ++;
+        //LED3_Count ++;
         LED13_Count ++;
         ECU_Count ++;
 #if (AUTORUN)
@@ -752,14 +863,29 @@ void main(void)
     INTCON = 0b11000000;					//GIE & PEIE
     //T1G_RPM_Init();
     //T0
-    //IOCBF5 = 0;
-    //IOCBP5 = 1;
+
+    IOCBF5 = 0;
+
+#if (BACK_TEST)
+    IOCBP5 = 1;
+    IOCBN5 = 0;
+
+#else
     IOCBP5 = 0;
     IOCBN5 = 1;
+
+#endif // end of BACK_TEST
+
     IOCIF = 0;
     IOCIE = 1;
 
+#if (!BACK_TEST)
     OPTION_REG = 0b11000001;				//1:4
+
+#else
+    OPTION_REG = 0b11000111;				//1:256
+    
+#endif
     TMR0 = 0;
     TMR0IF = 0;
 
@@ -800,6 +926,12 @@ void main(void)
     //    IOCBP5 = 0;
     //	IOCBN5 = 1;
     //}
+
+#if (BACK_TEST)
+    IsStart = 1;
+
+#endif // end of BACK_TEST
+
     Check_Motor_Status();
     Check_Hand_Status();
     switch(Gear_Status_NEW)
@@ -832,8 +964,10 @@ void main(void)
         IsFistBoot = 1;
         //Pull = 1;
         Gear_Status_NEW = _2WD;
+
 #if(FRONT_TEST)
         Gear_Status_OLD = _2WD;
+
 #endif
     }
 
@@ -845,8 +979,15 @@ void main(void)
 
     while(1)
     {	
+#if (BACK_TEST)
+        IOCBP5 = 1;
+        IOCBN5 = 0;
+
+#else
         IOCBP5 = 0;
         IOCBN5 = 1;
+
+#endif // end of BACK_TESt
 
         if (Special == 1)												//開機第一次會做
         {
@@ -862,6 +1003,7 @@ void main(void)
             Check_Motor_Status();	
         }
 
+#if(!BACK_TEST)
         if(Speed_rd)
         {
             Speed_rd = 0;	
@@ -870,6 +1012,7 @@ void main(void)
             NOP();
             NOP();
         }
+#endif // end of !BACK_TESt
 
         ADC_Func();			
         if( (RB5 == 1 && RPM_Zero ==1)||(RB5 == 0 && RPM_Zero ==1)) 	//轉速為"0"或接地時，RPM超速燈號關閉
@@ -913,6 +1056,9 @@ void main(void)
         {
             ADC_Func();
         }
+#if (AUTORUN)
+        Speed = 0;
+#endif
 
         if(((Speed < 15)&&(Voltage_Error == 0) && (Over_Speed_Error ==0)))	
         {	
@@ -1003,6 +1149,13 @@ void main(void)
                                 Change_Func(_2WD,Motor_2WD_Status);
                                 Gear_Status_OLD = Gear_Status_NEW;	
                             }
+                            else if (Speed < 15) 
+                            {
+                                //		L1_Out = 1; L2_Out = 0; L3_Out = 0;	
+                                Gear_ECU_Status_OLD = Gear_Status_OLD;	
+                                Change_Func(_2WD,Motor_2WD_Status);
+                                Gear_Status_OLD = Gear_Status_NEW;	
+                            }
                         }
                         break;
 #if 0
@@ -1043,6 +1196,9 @@ void main(void)
  ******************************************************************************/
 void autorun_Hand_Status(void)
 {
+
+    if(Pull_Error == 1 ) return;	
+
     if(autorunCunt >= 24)
     {
         autorunCunt = 0;
@@ -1792,11 +1948,12 @@ void Delay_128msec(unsigned int Time)
 
 void LED1_FLASH(unsigned int Time)
 {	
-
+/*
     if(LED1_Count >= Time)
     {	LED1_Count =0;
         LED1 =!LED1;
     }
+ */
 }
 
 /******************************************************************************
@@ -1972,6 +2129,16 @@ void Gear_Status_NEW_2WD_Flash(void)
         }
         ECU_2W4W_FLASH(4);
     }
+    else
+    {
+        if (IsFistFlash)
+        {
+            L1_Out = 1; L2_Out = 0; L3_Out = 1; // 4W
+            IsFistFlash = 0;
+        }
+        ECU_2W4W_FLASH(4);  //L3 Toggle
+    }
+
 }
 /******************************************************************************
  *    ReadFeedback

@@ -10,6 +10,7 @@ union
 	unsigned char Temp[2] ;
 }PAC1710;
 
+
 void I2C_Init(void)
 {
 	SCL=1;				// Initial PortC,bit 3 & 4 as Input with Open Drain
