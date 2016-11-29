@@ -188,10 +188,10 @@ __CONFIG(FOSC_INTOSC & WDTE_OFF & PWRTE_ON & CP_OFF & BOREN_OFF & CLKOUTEN_OFF &
 __CONFIG(WRT_ALL & PLLEN_OFF & STVREN_ON & LVP_OFF & BORV_HI);
 //================================================================================================
 //  寫入燒入程式的版本  
-//  EEPROM data  [NOP]  [年]  [年]  [月]  [日] [版次] [NOP]  [NOP]
+//  EEPROM data  [NOP]  [年]  [年]  [月]  [日] [版次] [.版次] [NOP]  [NOP]
 //================================================================================================
 
-//__EEPROM_DATA(0xAB, 0x20, 0x16, 0x06, 0x15, 0x01, 0xFF, 0xFF);
+__EEPROM_DATA(0xAB, 0x20, 0x16, 0x11, 0x07, 0x01, 0x00, 0xFF, 0xFF);
 
 /*
  * Timer 2 delay count:
@@ -201,7 +201,17 @@ __CONFIG(WRT_ALL & PLLEN_OFF & STVREN_ON & LVP_OFF & BORV_HI);
  * 1 sec. -> 8
  * 0.5 sec. -> 4
  */
-
+/*        定義值設定表
+ *              | FRONT_TEST    | BACK_TEST | AUTORUN
+ * ---------------------------------------------------
+ * 前差機種     |       1       |    0      |    0
+ * ---------------------------------------------------
+ * 前後差機種   |       0       |    0      |    0
+ * ---------------------------------------------------
+ * 後差機種     |       0       |    1      |    0
+ * ---------------------------------------------------
+ * 前差自動     |       1       |    0      |    1
+ */
 
 #define	Comeback_2WD_EN		0
 #define	Self_Test_EN		0
@@ -215,8 +225,8 @@ __CONFIG(WRT_ALL & PLLEN_OFF & STVREN_ON & LVP_OFF & BORV_HI);
 #define No_Feedback_EN     	1
 
 ////////////////////////////////// 前後差作動定義//////////////////////////////////////
-#define FRONT_TEST 0 //單獨前差作動
-#define BACK_TEST  1 //單獨後差作動
+#define FRONT_TEST 1 //單獨前差作動
+#define BACK_TEST  0 //單獨後差作動
 #define  AUTORUN   0 //自動執行手把切換，長時間驗證
 unsigned char autorunCunt = 0;
 
@@ -1199,7 +1209,7 @@ void autorun_Hand_Status(void)
 
     if(Pull_Error == 1 ) return;	
 
-    if(autorunCunt >= 24)
+    if(autorunCunt >= 128) //24)
     {
         autorunCunt = 0;
         switch(Gear_Status_OLD)
